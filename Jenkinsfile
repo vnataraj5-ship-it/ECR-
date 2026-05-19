@@ -4,16 +4,17 @@ pipeline {
 
     environment {
 
-        AWS_REGION = 'ap-south-1'
+        AWS_REGION = "ap-south-1"
 
-        ECR_REGISTRY = '583067668082.dkr.ecr.ap-south-1.amazonaws.com'
+        IMAGE_NAME = "helloapp"
 
-        ECR_REPO = '583067668082.dkr.ecr.ap-south-1.amazonaws.com/helloapp'
+        ECR_REGISTRY = "583067668082.dkr.ecr.ap-south-1.amazonaws.com"
 
-        IMAGE_TAG = "${BUILD_NUMBER}"
+        ECR_REPO = "583067668082.dkr.ecr.ap-south-1.amazonaws.com/helloapp"
 
-        DEPLOY_SERVER = 'ubuntu@13.203.196.159'
+        DEPLOY_SERVER = "ubuntu@13.203.196.159"
 
+        SONAR_SCANNER = tool 'sonar-scanner'
     }
 
     stages {
@@ -23,10 +24,9 @@ pipeline {
             steps {
 
                 git branch: 'main',
+
                 url: 'https://github.com/vnataraj5-ship-it/ECR-.git'
-
             }
-
         }
 
         stage('SonarQube Analysis') {
@@ -35,98 +35,87 @@ pipeline {
 
                 withSonarQubeEnv('sonar-server') {
 
-                    sh '''
-
-                    ${tool 'sonar-scanner'}/bin/sonar-scanner
-
-                    '''
-
+                    sh """
+                    ${SONAR_SCANNER}/bin/sonar-scanner \
+                    -Dsonar.projectKey=helloapp \
+                    -Dsonar.sources=. \
+                    -Dsonar.host.url=http://65.0.30.181:9000
+                    """
                 }
-
             }
-
         }
 
         stage('Docker Build') {
 
             steps {
 
-                sh '''
-
-                docker build -t myapp:${BUILD_NUMBER} .
-
-                '''
-
+                sh """
+                docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+                """
             }
-
         }
 
-        stage('Push ECR') {
+        stage('Push Image to ECR') {
 
             steps {
 
-                sh '''
+                sh """
 
                 aws ecr get-login-password \
-                --region $AWS_REGION |
+                --region ${AWS_REGION} |
 
                 docker login \
                 --username AWS \
                 --password-stdin \
-                $ECR_REGISTRY
+                ${ECR_REGISTRY}
 
-                docker tag myapp:${BUILD_NUMBER} \
-                $ECR_REPO:${BUILD_NUMBER}
+                docker tag \
+                ${IMAGE_NAME}:${BUILD_NUMBER} \
+                ${ECR_REPO}:${BUILD_NUMBER}
 
                 docker push \
-                $ECR_REPO:${BUILD_NUMBER}
+                ${ECR_REPO}:${BUILD_NUMBER}
 
-                '''
-
+                """
             }
-
         }
 
-        stage('Deploy EC2') {
+        stage('Deploy to EC2') {
 
             steps {
 
                 sshagent(['deploy-server']) {
 
-                    sh '''
+                    sh """
 
-                    ssh -o StrictHostKeyChecking=no $DEPLOY_SERVER "
+                    ssh -o StrictHostKeyChecking=no \
+                    ${DEPLOY_SERVER} "
 
                     aws ecr get-login-password \
-                    --region $AWS_REGION |
+                    --region ${AWS_REGION} |
 
                     docker login \
                     --username AWS \
                     --password-stdin \
-                    $ECR_REGISTRY
+                    ${ECR_REGISTRY}
 
-                    docker stop myapp || true
+                    docker stop helloapp || true
 
-                    docker rm myapp || true
+                    docker rm helloapp || true
 
                     docker pull \
-                    $ECR_REPO:${BUILD_NUMBER}
+                    ${ECR_REPO}:${BUILD_NUMBER}
 
                     docker run -d \
-                    --name myapp \
+                    --name helloapp \
                     -p 5000:5000 \
-                    $ECR_REPO:${BUILD_NUMBER}
+                    ${ECR_REPO}:${BUILD_NUMBER}
 
                     "
 
-                    '''
-
+                    """
                 }
-
             }
-
         }
-
     }
-
 }
