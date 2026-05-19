@@ -16,9 +16,6 @@ DEPLOY_SERVER='ubuntu@13.203.196.159'
 
 }
 
-tools{
-    sonarScanner 'sonar-scanner'
-}
 
 stages {
 
